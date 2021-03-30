@@ -23,6 +23,7 @@ class epp(Module):
         'resData':      'descend',
         'qDate':        'set',
         'msg':          'set',
+        'error':        'set',
     }
 
 ### RESPONSE parsing

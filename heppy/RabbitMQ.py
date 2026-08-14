@@ -18,6 +18,7 @@ class RPCServer:
         self.channel = self.connection.channel()
         self.channel.queue_declare(
             queue=self.queue,
+            durable=True,
         )
         self.channel.basic_qos(prefetch_count=1)
 

@@ -5,6 +5,25 @@ from unittest.mock import MagicMock, patch
 from heppy.RabbitMQ import RPCServer
 
 
+class FakeConfig(dict):
+    def get(self, key, default=None):
+        return dict.get(self, key, default)
+
+
+class TestRPCServerInit(unittest.TestCase):
+    def test_declares_queue_as_durable(self):
+        # Non-durable + non-exclusive queues are the deprecated
+        # `transient_nonexcl_queues` RabbitMQ 4.x feature; durable=True keeps
+        # this working without it, on both 3.8 and 4.3.
+        config = FakeConfig({'queue': 'heppy-test'})
+
+        with patch('heppy.RabbitMQ.pika.BlockingConnection') as mock_connection:
+            channel = mock_connection.return_value.channel.return_value
+            RPCServer(config)
+
+        channel.queue_declare.assert_called_once_with(queue='heppy-test', durable=True)
+
+
 class TestRPCServerOnRequest(unittest.TestCase):
     def setUp(self):
         self.server = RPCServer.__new__(RPCServer)

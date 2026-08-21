@@ -15,14 +15,14 @@ from heppy.Request import Request
 from heppy.Systemd import Systemd
 from heppy.Response import Response
 from heppy.RabbitMQ import RPCServer
-from heppy.RabbitMQConfig import RabbitMQConfig
 from heppy.SmartRequest import SmartRequest
 from heppy.SignalHandler import SignalHandler
 
 
 class Daemon:
-    def __init__(self, config):
+    def __init__(self, config, rabbit_config):
         self.config = config
+        self.rabbit_config = rabbit_config
         self.is_external = False
         self.client = None
         self.handler = SignalHandler({
@@ -66,8 +66,7 @@ class Daemon:
             self.server = SocketServer(socket_config['address'])
             self.server.consume(self.smart_request, self.recheck, self.refreshSeconds)
         else:
-            rabbit_config = RabbitMQConfig(self.config).resolve()
-            self.server = RPCServer(rabbit_config)
+            self.server = RPCServer(self.rabbit_config)
             self.server.consume(self.smart_request, self.recheck, self.refreshSeconds)
 
     def recheck(self):

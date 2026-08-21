@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import json
 import os
 import tempfile
 import unittest
@@ -12,10 +13,7 @@ class FakeConfig(dict):
 
 
 class TestRabbitMQConfig(unittest.TestCase):
-    ENV_KEYS = (
-        'RABBITMQ_USERNAME', 'RABBITMQ_USERNAME_FILE',
-        'RABBITMQ_PASSWORD', 'RABBITMQ_PASSWORD_FILE',
-    )
+    ENV_KEYS = ('RABBITMQ_USERNAME', 'RABBITMQ_PASSWORD', 'RABBITMQ_CREDENTIALS_FILE')
 
     def setUp(self):
         self._env = dict(os.environ)
@@ -26,8 +24,8 @@ class TestRabbitMQConfig(unittest.TestCase):
         os.environ.clear()
         os.environ.update(self._env)
 
-    def write_secret_file(self, content):
-        f = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.secret')
+    def write_credentials_file(self, content):
+        f = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json')
         self.addCleanup(os.unlink, f.name)
         f.write(content)
         f.close()
@@ -88,18 +86,33 @@ class TestRabbitMQConfig(unittest.TestCase):
 
         self.assertEqual(resolved['password'], '')
 
-    def test_file_env_var_overrides_config(self):
-        os.environ['RABBITMQ_PASSWORD_FILE'] = self.write_secret_file('file-secret-pass\n')
+    def test_credentials_file_overrides_config(self):
+        os.environ['RABBITMQ_CREDENTIALS_FILE'] = self.write_credentials_file(
+            json.dumps({'username': 'file-secret-user', 'password': 'file-secret-pass'})
+        )
         config = FakeConfig({'name': 'x', 'RabbitMQ': {'username': 'file-user', 'password': 'file-pass'}})
 
         resolved = RabbitMQConfig(config).resolve()
 
-        # Trailing newline (how Secret-mounted files are typically written) is stripped.
+        self.assertEqual(resolved['username'], 'file-secret-user')
         self.assertEqual(resolved['password'], 'file-secret-pass')
 
-    def test_plain_env_var_and_file_env_var_together_is_an_error(self):
+    def test_credentials_file_partial_keys_only_override_those_keys(self):
+        os.environ['RABBITMQ_CREDENTIALS_FILE'] = self.write_credentials_file(
+            json.dumps({'password': 'file-secret-pass'})
+        )
+        config = FakeConfig({'name': 'x', 'RabbitMQ': {'username': 'file-user', 'password': 'file-pass'}})
+
+        resolved = RabbitMQConfig(config).resolve()
+
+        self.assertEqual(resolved['username'], 'file-user')
+        self.assertEqual(resolved['password'], 'file-secret-pass')
+
+    def test_plain_env_var_and_credentials_file_together_is_an_error(self):
         os.environ['RABBITMQ_PASSWORD'] = 'env-pass'
-        os.environ['RABBITMQ_PASSWORD_FILE'] = self.write_secret_file('file-secret-pass')
+        os.environ['RABBITMQ_CREDENTIALS_FILE'] = self.write_credentials_file(
+            json.dumps({'username': 'file-secret-user', 'password': 'file-secret-pass'})
+        )
         config = FakeConfig({'name': 'x'})
 
         with self.assertRaises(ValueError):

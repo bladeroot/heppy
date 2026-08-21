@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import tempfile
 import unittest
 from heppy.RabbitMQConfig import RabbitMQConfig
 
@@ -11,14 +12,26 @@ class FakeConfig(dict):
 
 
 class TestRabbitMQConfig(unittest.TestCase):
+    ENV_KEYS = (
+        'RABBITMQ_USERNAME', 'RABBITMQ_USERNAME_FILE',
+        'RABBITMQ_PASSWORD', 'RABBITMQ_PASSWORD_FILE',
+    )
+
     def setUp(self):
         self._env = dict(os.environ)
-        os.environ.pop('RABBITMQ_USERNAME', None)
-        os.environ.pop('RABBITMQ_PASSWORD', None)
+        for key in self.ENV_KEYS:
+            os.environ.pop(key, None)
 
     def tearDown(self):
         os.environ.clear()
         os.environ.update(self._env)
+
+    def write_secret_file(self, content):
+        f = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.secret')
+        self.addCleanup(os.unlink, f.name)
+        f.write(content)
+        f.close()
+        return f.name
 
     def test_defaults_queue_name_from_config_name(self):
         config = FakeConfig({'name': 'donuts.epp'})
@@ -74,6 +87,23 @@ class TestRabbitMQConfig(unittest.TestCase):
         resolved = RabbitMQConfig(config).resolve()
 
         self.assertEqual(resolved['password'], '')
+
+    def test_file_env_var_overrides_config(self):
+        os.environ['RABBITMQ_PASSWORD_FILE'] = self.write_secret_file('file-secret-pass\n')
+        config = FakeConfig({'name': 'x', 'RabbitMQ': {'username': 'file-user', 'password': 'file-pass'}})
+
+        resolved = RabbitMQConfig(config).resolve()
+
+        # Trailing newline (how Secret-mounted files are typically written) is stripped.
+        self.assertEqual(resolved['password'], 'file-secret-pass')
+
+    def test_plain_env_var_and_file_env_var_together_is_an_error(self):
+        os.environ['RABBITMQ_PASSWORD'] = 'env-pass'
+        os.environ['RABBITMQ_PASSWORD_FILE'] = self.write_secret_file('file-secret-pass')
+        config = FakeConfig({'name': 'x'})
+
+        with self.assertRaises(ValueError):
+            RabbitMQConfig(config).resolve()
 
 
 if __name__ == '__main__':

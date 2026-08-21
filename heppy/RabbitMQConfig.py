@@ -37,7 +37,7 @@ class RabbitMQConfig:
         self.config = config
 
     def resolve(self):
-        rabbit_config = dict(self.config.get('RabbitMQ', {}))
+        rabbit_config = self._config_section()
         rabbit_config.setdefault('queue', 'heppy-' + self.config['name'])
 
         has_file = CREDENTIALS_FILE_ENV in os.environ
@@ -58,3 +58,8 @@ class RabbitMQConfig:
                     rabbit_config[key] = os.environ[env_name]
 
         return rabbit_config
+
+    def _config_section(self):
+        if 'RabbitMQ' in self.config:
+            return dict(self.config['RabbitMQ'])
+        return {}
